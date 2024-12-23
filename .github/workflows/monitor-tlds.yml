@@ -1,0 +1,45 @@
+name: Monitor TLD List
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs once a day at midnight
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download current TLD list
+        run: |
+          curl -o tlds-alpha-by-domain.txt https://data.iana.org/TLD/tlds-alpha-by-domain.txt
+
+      - name: Compare with previous version
+        run: |
+          if [ -f prev-tlds-alpha-by-domain.txt ]; then
+            diff tlds-alpha-by-domain.txt prev-tlds-alpha-by-domain.txt > changes.diff || true
+          fi
+
+      - name: Save new TLD list
+        run: |
+          mv tlds-alpha-by-domain.txt prev-tlds-alpha-by-domain.txt
+        continue-on-error: true
+
+      - name: Send notification if changes found
+        if: steps.compare.outcome == 'success'
+        run: |
+          echo "The TLD list has been updated:" > notification.txt
+          cat changes.diff >> notification.txt
+          # Optionally send email or other alert
+
+      - name: Commit changes (if any)
+        if: steps.compare.outcome == 'success'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add prev-tlds-alpha-by-domain.txt
+          git commit -m "Update TLD list [skip ci]"
+          git push
